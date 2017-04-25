@@ -7,12 +7,25 @@ Usage
 ---
 
 ```js
-const rtsp = require('eas-rtsp')
+'use strict'
 
-rtsp.initExtract()
+const addon = require('./build/Release/eas-rtsp')
 
-rtsp.on('data', (data, size) => {
-	http.send(data, size);
+addon.getBuffer((err, buffer) => {
+  if (err) {
+    console.log(err)
+  } else {
+    console.log(buffer.toString('hex'))
+  }
 })
 ```
 
+Build
+---
+
+Compile live555 con el flag -fPIC
+
+```bash
+node-gyp configure
+node-gyp build
+```
