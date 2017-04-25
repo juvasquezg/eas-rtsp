@@ -1,0 +1,28 @@
+{
+  "name": "eas-rtsp",
+  "version": "0.0.1",
+  "description": "Extract and send rtsp",
+  "author": "julian.vasquez <julian.vasquez@netuxtecnologia.com>",
+  "homepage": "https://bitbucket.org",
+  "repository": "https://bitbucket.org",
+  "main": "./index",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 0.8.0"
+  },
+  "scripts": {
+    "test": "node test.js",
+    "format": "clang-format -i src/eas-rtsp.cc",
+    "lint": "standard && clang-format -output-replacements-xml src/eas-rtsp.cc | (! grep -q '<replacement ')"
+  },
+  "dependencies": {
+    "bindings": "1.2.x",
+    "nan": "2.6.x",
+    "streaming-worker": "^1.0.1",
+    "streaming-worker-sdk": "^0.9.3"
+  },
+  "devDependencies": {
+    "clang-format": "^1.0.38",
+    "standard": "^10.0.1"
+  }
+}
