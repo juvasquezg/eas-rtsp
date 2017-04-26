@@ -1,12 +1,13 @@
 
 #include "rtspconnectionclient.h"
+#include <signal.h>
 
-RTSPConnection::SessionSink::SessionSink(UsageEnvironment& env, Callback* callback, Nan::Callback* node_callback) 
+RTSPConnection::SessionSink::SessionSink(UsageEnvironment& env, Callback* callback, vector<unsigned char>& node_buffer) 
 	: MediaSink(env)
 	, m_buffer(NULL)
 	, m_bufferSize(0)
 	, m_callback(callback)
-    , m_node_callback(node_callback)
+    , m_node_buffer(node_buffer)
 	, m_markerSize(0)
 {
 	allocate(1024*1024);
@@ -38,12 +39,13 @@ void RTSPConnection::SessionSink::afterGettingFrame(unsigned frameSize, unsigned
 		allocate(m_bufferSize*2);
 	}
 	else if (m_callback)
-	{	
-		if (!m_callback->onData(this->name(), m_buffer, frameSize+m_markerSize, presentationTime, m_node_callback))
+	{
+		if (!m_callback->onData(this->name(), m_buffer, frameSize+m_markerSize, presentationTime, m_node_buffer))
 		{
 			envir() << "NOTIFY failed\n";
 		}
 	}
+	raise(SIGUSR1);
 	this->continuePlaying();
 }
 
@@ -57,14 +59,15 @@ Boolean RTSPConnection::SessionSink::continuePlaying()
 							   onSourceClosure, this);
 		ret = True;
 	}
+	
 	return ret;	
 }
 
 
-RTSPConnection::RTSPConnection(Environment& env, Callback* callback, const char* rtspURL, Nan::Callback* node_callback, int timeout, bool rtpovertcp, int verbosityLevel) 
+RTSPConnection::RTSPConnection(Environment& env, Callback* callback, const char* rtspURL, vector<unsigned char>& node_buffer, int timeout, bool rtpovertcp, int verbosityLevel) 
 	: m_env(env)
 	, m_callback(callback)
-	, m_node_callback(node_callback)
+	, m_node_buffer(node_buffer)
 	, m_url(rtspURL)
 	, m_timeout(timeout)
 	, m_rtpovertcp(rtpovertcp)
@@ -82,7 +85,7 @@ void RTSPConnection::start()
 		Medium::close(m_rtspClient);
 	}
 	
-	m_rtspClient = new RTSPClientConnection(*this, m_env, m_callback, m_url, m_node_callback, m_timeout, m_rtpovertcp, m_verbosity);	
+	m_rtspClient = new RTSPClientConnection(*this, m_env, m_callback, m_url, m_node_buffer, m_timeout, m_rtpovertcp, m_verbosity);	
 }
 
 RTSPConnection::~RTSPConnection()
@@ -91,7 +94,7 @@ RTSPConnection::~RTSPConnection()
 }
 
 		
-RTSPConnection::RTSPClientConnection::RTSPClientConnection(RTSPConnection& connection, Environment& env, Callback* callback, const char* rtspURL, Nan::Callback* node_callback, int timeout, bool rtpovertcp, int verbosityLevel) 
+RTSPConnection::RTSPClientConnection::RTSPClientConnection(RTSPConnection& connection, Environment& env, Callback* callback, const char* rtspURL, vector<unsigned char>& node_buffer, int timeout, bool rtpovertcp, int verbosityLevel) 
 	: RTSPClientConstrutor(env, rtspURL, verbosityLevel, NULL, 0)
 	, m_connection(connection)
 	, m_timeout(timeout)
@@ -99,7 +102,7 @@ RTSPConnection::RTSPClientConnection::RTSPClientConnection(RTSPConnection& conne
 	, m_session(NULL)
 	, m_subSessionIter(NULL)
 	, m_callback(callback)
-	, m_node_callback(node_callback)
+	, m_node_buffer(node_buffer)
 	, m_connectionTask(NULL)
 	, m_dataTask(NULL)
 	, m_nbPacket(0)
@@ -195,7 +198,7 @@ void RTSPConnection::RTSPClientConnection::continueAfterSETUP(int resultCode, ch
 	}
 	else
 	{				
-		m_subSession->sink = SessionSink::createNew(envir(), m_callback, m_node_callback);
+		m_subSession->sink = SessionSink::createNew(envir(), m_callback, m_node_buffer);
 		if (m_subSession->sink == NULL) 
 		{
 			envir() << "Failed to create a data sink for " << m_subSession->mediumName() << "/" << m_subSession->codecName() << " subsession: " << envir().getResultMsg() << "\n";

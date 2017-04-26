@@ -14,8 +14,11 @@
 #include "environment.h"
 #include "liveMedia.hh"
 
+#include <iostream>
 #include <nan.h>
 #include <v8.h>
+
+using namespace std;
 
 #define RTSP_CALLBACK(uri, resultCode, resultString) \
 static void continueAfter ## uri(RTSPClient* rtspClient, int resultCode, char* resultString) { static_cast<RTSPConnection::RTSPClientConnection*>(rtspClient)->continueAfter ## uri(resultCode, resultString); } \
@@ -47,7 +50,7 @@ class RTSPConnection
 		{
 			public:
 				virtual bool    onNewSession(const char* id, const char* media, const char* codec, const char* sdp) { return true; }
-				virtual bool    onData(const char* id, unsigned char* buffer, ssize_t size, struct timeval presentationTime, Nan::Callback* node_callback) = 0;
+				virtual bool    onData(const char* id, unsigned char* buffer, ssize_t size, struct timeval presentationTime, vector<unsigned char>& node_buffer) = 0;
 				virtual ssize_t onNewBuffer(unsigned char* , ssize_t ) { return 0; }
 				virtual void    onError(const char* ) {}
 				virtual void    onConnectionTimeout(RTSPConnection&) {}
@@ -61,10 +64,10 @@ class RTSPConnection
 		class SessionSink: public MediaSink 
 		{
             public:
-            static SessionSink* createNew(UsageEnvironment& env, Callback* callback, Nan::Callback* node_callback) { return new SessionSink(env, callback, node_callback); }
+            static SessionSink* createNew(UsageEnvironment& env, Callback* callback, vector<unsigned char>& node_buffer) { return new SessionSink(env, callback, node_buffer); }
 
 			private:
-            SessionSink(UsageEnvironment& env, Callback* callback, Nan::Callback* node_callback);
+            SessionSink(UsageEnvironment& env, Callback* callback, vector<unsigned char>& node_buffer);
 				virtual ~SessionSink();
 
 				void allocate(ssize_t bufferSize);
@@ -85,7 +88,7 @@ class RTSPConnection
 				u_int8_t*              m_buffer;
 				size_t                 m_bufferSize;
 				Callback*              m_callback;
-                Nan::Callback*         m_node_callback;
+                vector<unsigned char>& m_node_buffer;
 				ssize_t                m_markerSize;
 		};
 	
@@ -95,7 +98,7 @@ class RTSPConnection
 		class RTSPClientConnection : public RTSPClient
 		{
 			public:
-			RTSPClientConnection(RTSPConnection& connection, Environment& env, Callback* callback, const char* rtspURL, Nan::Callback* node_callback, int timeout, bool rtpovertcp, int verbosityLevel);
+			RTSPClientConnection(RTSPConnection& connection, Environment& env, Callback* callback, const char* rtspURL, vector<unsigned char>& node_buffer, int timeout, bool rtpovertcp, int verbosityLevel);
 				virtual ~RTSPClientConnection(); 
 			
 			protected:
@@ -116,14 +119,14 @@ class RTSPConnection
 				MediaSubsession*         m_subSession;             
 				MediaSubsessionIterator* m_subSessionIter;
 				Callback*                m_callback;
-                Nan::Callback*           m_node_callback;
+                vector<unsigned char>&   m_node_buffer;
 				TaskToken 		 m_connectionTask;
 				TaskToken 		 m_dataTask;
 				unsigned int             m_nbPacket;
 		};
 		
 	public:
-		RTSPConnection(Environment& env, Callback* callback, const char* rtspURL, Nan::Callback* node_callbak, int timeout = 5, bool rtpovertcp = false, int verbosityLevel = 1);
+		RTSPConnection(Environment& env, Callback* callback, const char* rtspURL, vector<unsigned char>& node_buffer, int timeout = 5, bool rtpovertcp = false, int verbosityLevel = 1);
 		virtual ~RTSPConnection();
 
 		void start();
@@ -133,7 +136,7 @@ class RTSPConnection
 		Environment&             m_env;
 		Callback*                m_callback; 	
 		const char*              m_url;
-        Nan::Callback*           m_node_callback;
+        vector<unsigned char>&   m_node_buffer;
 		int                      m_timeout;
 		bool                     m_rtpovertcp;
 		int                      m_verbosity;

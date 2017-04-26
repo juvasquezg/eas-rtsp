@@ -8,16 +8,21 @@
 ** -------------------------------------------------------------------------*/
 
 
+#include <iostream>
 #include "environment.h"
 
-Environment::Environment() : BasicUsageEnvironment(*BasicTaskScheduler::createNew()), m_stop(0)
+Environment::Environment() : Environment(m_stopRef)
 {
+}
+
+Environment::Environment(char & stop) : BasicUsageEnvironment(*BasicTaskScheduler::createNew()), m_stop(stop)
+{
+	m_stop = 0;
 }
 
 Environment::~Environment()
 {
 	TaskScheduler* scheduler = &this->taskScheduler();
-	this->reclaim();
 	delete scheduler;	
 }
 

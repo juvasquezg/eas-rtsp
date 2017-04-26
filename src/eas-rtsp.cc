@@ -1,28 +1,81 @@
 #include <rtspconnectionclient.h>
+#include <signal.h>
 
+using namespace Nan;
 using namespace v8;
 
-NAN_METHOD(getBuffer) {
-	Nan:: HandleScope scope;
+uint8_t marker[] = { 0, 0, 0, 1 };
+
+char stop = 0;
+
+
+void buffer_delete_callback(char* data, void* the_vector) {
+	delete reinterpret_cast<vector<unsigned char> *> (the_vector);
+}
+
+void sig_handler(int signo) {
+	if (signo == SIGINT) {
+		printf("received SIGINT\n");
+		stop = 1;
+	}
+	if (signo == SIGUSR1) {
+		printf("received SIGUSR1\n");
+		stop = 1;
+	}
+}
+
+class NodeWorker : public AsyncWorker {
+  public:
+	NodeWorker(Callback *callback) : AsyncWorker(callback) {}
+
+	~NodeWorker() {}
 	
+	void Execute () {
+		class RTSPCallback : public RTSPConnection::Callback
+		{
+		  public:
+			virtual bool onData(const char* id, unsigned char* buffer, ssize_t size, struct timeval presentationTime, vector<unsigned char>& m_node_buffer) {
+				m_node_buffer.clear();
+				m_node_buffer.insert(m_node_buffer.end(), marker, marker+sizeof(marker));
+				m_node_buffer.insert(m_node_buffer.end(), buffer, buffer+size);
+
+				std::cout << id << " " << size << " ts:" << presentationTime.tv_sec << "." << presentationTime.tv_usec << std::endl;
+				return true;
+			}
+		};
+
+		// Reserva espacio en memoria para el puntero al vector<uint8_t>
+		m_node_buffer = new vector<uint8_t>();
+			
+		Environment env(stop);
+		RTSPCallback cb;
+		RTSPConnection rtspClient(env, &cb, "rtsp://admin:@192.168.1.38:554/live1.sdp", *m_node_buffer);
+		signal(SIGINT, sig_handler);
+		signal(SIGUSR1, sig_handler);
+		env.mainloop();
+	
+	}
+
+	// We have the results, and we're back in the event loop.
+	void HandleOKCallback () {
+		Nan:: HandleScope scope;
+
+		v8::Local<v8::Object> node_buffer = 
+			Nan::NewBuffer((char *)m_node_buffer->data(), 
+						   m_node_buffer->size(), buffer_delete_callback,
+						   m_node_buffer).ToLocalChecked();
+		v8::Local<v8::Value> argv[] = { Nan::Null(), node_buffer };
+		callback->Call(2, argv);
+	}
+  private:
+	std::vector<uint8_t> * m_node_buffer;
+	char m_stop = 1;
+};
+
+NAN_METHOD(getBuffer) {
 	Nan::Callback *node_callback = new Nan::Callback(info[0].As<Function>());
 
-	class RTSPCallback : public RTSPConnection::Callback
-	{
-	public:
-		virtual bool onData(const char* id, unsigned char* buffer, ssize_t size, struct timeval presentationTime,  Nan::Callback* node_callback) {
-			// std::cout << id << " " << size << " ts:" << presentationTime.tv_sec << "." << presentationTime.tv_usec << std::endl;
-			v8::Local<v8::Object> node_buffer = Nan::NewBuffer((char *)buffer, size).ToLocalChecked();
-			v8::Local<v8::Value> argv[] = { node_buffer };
-			node_callback->Call(1, argv);
-			return true;
-		}
-	};
-  
-	Environment env;
-	RTSPCallback cb;
-	RTSPConnection rtspClient(env, &cb, "rtsp://admin:@192.168.1.38:554/live1.sdp", node_callback);
-	env.mainloop();
+	AsyncQueueWorker(new NodeWorker(node_callback));
 }
 
 
